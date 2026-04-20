@@ -11,6 +11,12 @@ st.set_page_config(page_title="宮宅建 中年部会 割り勘精算くん", la
 st.title("⚖️ 割り勘インボイス精算くん")
 st.write("領収書をアップして、人数を入れるだけで精算書PDFを作成します。")
 
+# --- セッションステート（記憶領域）の初期化 ---
+if "show_downloads" not in st.session_state:
+    st.session_state.show_downloads = False
+if "generated_pdfs" not in st.session_state:
+    st.session_state.generated_pdfs = []
+
 # --- 入力エリア ---
 uploaded_file = st.file_uploader("領収書（レシート）画像またはPDFをアップロードしてください", type=['jpg', 'jpeg', 'png', 'pdf'])
 num_people = st.number_input("割り勘の人数", min_value=1, value=4)
@@ -153,16 +159,20 @@ if st.button("精算用データを作成する"):
     if total_amount is None:
         st.warning("⚠️「支払総額」を入力してください。")
     else:
-        # スピナーを表示し、その中で全PDFデータを生成してリストに一時保存する
         with st.spinner("準備中です。しばらくお待ちください..."):
-            generated_pdfs = []
+            temp_pdfs = []
             for i, rec in enumerate(recipients_list):
                 pdf_data = create_pdf(rec)
                 label = f"📥 {rec if rec else '宛名なし'} の領収書をダウンロード"
                 fname = f"receipt_{rec if rec else 'blank'}.pdf"
-                generated_pdfs.append((label, pdf_data, fname, f"dl_{i}"))
-        
-        # 準備が完了したらメッセージとダウンロードボタンを表示
-        st.success("精算用領収書ができたので下記からダウンロードください。")
-        for label, pdf_data, fname, key in generated_pdfs:
-            st.download_button(label=label, data=pdf_data, file_name=fname, mime="application/pdf", key=key)
+                temp_pdfs.append((label, pdf_data, fname, f"dl_{i}"))
+            
+            # 作成したデータをセッションステート（記憶領域）に保存
+            st.session_state.generated_pdfs = temp_pdfs
+            st.session_state.show_downloads = True
+
+# 記憶領域にデータがあれば、常にダウンロードボタンを表示する
+if st.session_state.show_downloads:
+    st.success("精算用領収書ができたので下記からダウンロードください。")
+    for label, pdf_data, fname, key in st.session_state.generated_pdfs:
+        st.download_button(label=label, data=pdf_data, file_name=fname, mime="application/pdf", key=key)
