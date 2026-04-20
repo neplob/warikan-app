@@ -3,7 +3,8 @@ from PIL import Image
 import math
 from fpdf import FPDF
 from datetime import datetime
-import fitz  # PDF読み込み用の追加機能
+import fitz  # PyMuPDF
+import io
 
 # --- アプリの基本設定 ---
 st.set_page_config(page_title="宮宅建 中年部会 割り勘精算くん", layout="centered")
@@ -11,11 +12,9 @@ st.title("⚖️ 割り勘インボイス精算くん")
 st.write("領収書をアップして、人数を入れるだけで精算書PDFを作成します。")
 
 # --- 入力エリア ---
-# typeに 'pdf' を追加しました
 uploaded_file = st.file_uploader("領収書（レシート）画像またはPDFをアップロードしてください", type=['jpg', 'jpeg', 'png', 'pdf'])
 num_people = st.number_input("割り勘の人数", min_value=1, value=4)
 
-# 初期値(value)をなくし、薄い文字(placeholder)に仮の値を設定しました
 purpose = st.text_input("懇親会の目的（摘要）", placeholder="例：〇〇部会 懇親会")
 issuer = st.text_input("発行元（立替者）", placeholder="例：〇〇会")
 recipient = st.text_input("宛名（空欄でもOK）", placeholder="〇〇様")
@@ -26,7 +25,6 @@ with col1:
     shop_name = st.text_input("店名", placeholder="例：居酒屋〇〇 駅前店")
     t_number = st.text_input("登録番号", placeholder="例：T1234567890123")
 with col2:
-    # 金額の初期値を空にし、プレースホルダーを設定しました
     total_amount = st.number_input("支払総額（円）", min_value=0, value=None, placeholder="例：10000")
     tax_10 = st.number_input("内、10%対象の消費税（円）", min_value=0, value=None, placeholder="例：909")
 
@@ -35,7 +33,6 @@ amount_per_person = 0
 if total_amount is not None and num_people > 0:
     amount_per_person = math.floor(total_amount / num_people)
 
-# 未入力のままPDFにされるのを防ぐための処理
 purpose_val = purpose if purpose else ""
 issuer_val = issuer if issuer else ""
 shop_name_val = shop_name if shop_name else ""
@@ -93,61 +90,103 @@ def create_pdf():
     pdf.cell(25, 5, '（元支払額）', ln=0)
     pdf.cell(100, 5, f'総額 ￥{total_amount_val:,}（内消費税 ￥{tax_10_val:,}）の1/{num_people}相当額', ln=True)
     
+    # 発行者と角印
     pdf.set_font('IPAexGothic', '', 14)
-    pdf.set_xy(120, 115)
-    pdf.cell(70, 10, issuer_val, align='R', ln=True)
+    issuer_text = issuer_val if issuer_val else "宮宅建中年部会"
+    text_width = pdf.get_string_width(issuer_text)
+    stamp_size = 16
+    margin_between = 4
+    total_width = text_width + margin_between + stamp_size
+    start_x = 195 - total_width 
+    text_y = 115
+    pdf.set_xy(start_x, text_y)
+    pdf.cell(text_width, 10, issuer_text, align='L')
     
-    # 疑似ハンコ
+    stamp_x, stamp_y = start_x + text_width + margin_between, text_y - 3 
+    stamp_text = issuer_text + "印"
+    if len(stamp_text) > 9: stamp_text = stamp_text[:8] + "印"
+    
+    length = len(stamp_text)
+    cols_s, rows_s = (2, 2) if length <= 4 else (2, 3) if length <= 6 else (3, 3)
+    stamp_text = stamp_text.ljust(cols_s * rows_s, " ")
+    
     pdf.set_draw_color(220, 20, 60)
     pdf.set_text_color(220, 20, 60)
-    pdf.set_line_width(0.4)
-    stamp_x, stamp_y, stamp_r = 175, 110, 8
-    pdf.ellipse(stamp_x, stamp_y, stamp_r*2, stamp_r*2, 'D')
-    pdf.set_font('IPAexGothic', '', 7)
-    pdf.text(stamp_x + 3, stamp_y + 5.5, '宮宅建')
-    pdf.text(stamp_x + 2, stamp_y + 9.5, '中年部')
-    pdf.text(stamp_x + 5, stamp_y + 13.5, '会印')
+    pdf.set_line_width(0.5)
+    pdf.rect(stamp_x, stamp_y, stamp_size, stamp_size)
+    pdf.set_line_width(0.15)
+    pdf.rect(stamp_x+0.8, stamp_y+0.8, stamp_size-1.6, stamp_size-1.6)
     
+    cell_w, cell_h = stamp_size / cols_s, stamp_size / rows_s
+    pdf.set_font('IPAexGothic', '', min(cell_w, cell_h) * 2.2)
+    for c in range(cols_s):
+        for r in range(rows_s):
+            idx = c * rows_s + r
+            if idx < len(stamp_text):
+                char = stamp_text[idx]
+                pdf.set_xy(stamp_x + (cols_s - 1 - c) * cell_w, stamp_y + r * cell_h - 0.5)
+                pdf.cell(cell_w, cell_h, char, align='C')
+                
     pdf.set_draw_color(0, 0, 0)
     pdf.set_text_color(0, 0, 0)
     pdf.set_line_width(0.2)
     
-    # 【2ページ目：元の領収書（画像またはPDF）】
+    # 【2ページ目：元の領収書を「まとめて1枚」に配置】
     if uploaded_file:
         pdf.set_auto_page_break(auto=True, margin=15) 
         pdf.add_page(orientation='P', format='A4')
         pdf.set_font('IPAexGothic', '', 12)
         pdf.cell(0, 10, '（証憑：元の領収書コピー）', ln=True) 
         
-        # PDFがアップロードされた場合は1ページ目を画像化して貼り付け
+        images = []
         if uploaded_file.name.lower().endswith('.pdf'):
             doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
-            page = doc.load_page(0)
-            pix = page.get_pixmap(dpi=150)
-            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            for page_index in range(len(doc)):
+                page = doc.load_page(page_index)
+                pix = page.get_pixmap(dpi=150)
+                img_data = pix.tobytes("png")
+                images.append(Image.open(io.BytesIO(img_data)))
         else:
-            img = Image.open(uploaded_file)
+            images.append(Image.open(uploaded_file))
             
-        img_path = "temp_receipt.png"
-        img.save(img_path)
+        # 複数ページをグリッド配置する計算
+        num_imgs = len(images)
+        cols = 1 if num_imgs == 1 else 2 if num_imgs <= 4 else 3
+        rows = math.ceil(num_imgs / cols)
         
-        w_px, h_px = img.size
-        aspect = h_px / w_px
-        target_w = 140
-        target_h = target_w * aspect
+        available_w = 190 # A4横幅マイナスマージン
+        available_h = 260 # A4縦幅マイナスマージン
         
-        if target_h > 260:
-            target_h = 260
-            target_w = target_h / aspect
+        cell_w = available_w / cols
+        cell_h = available_h / rows
+        
+        for i, img in enumerate(images):
+            img_path = f"temp_page_{i}.png"
+            img.save(img_path)
             
-        x_offset = (210 - target_w) / 2
-        pdf.image(img_path, x=x_offset, y=25, w=target_w, h=target_h)
+            # セル内でのアスペクト比調整
+            w_px, h_px = img.size
+            aspect = h_px / w_px
+            
+            draw_w = cell_w - 5 # マージン
+            draw_h = draw_w * aspect
+            
+            if draw_h > (cell_h - 5):
+                draw_h = cell_h - 5
+                draw_w = draw_h / aspect
+                
+            col_idx = i % cols
+            row_idx = i // cols
+            
+            cur_x = 10 + col_idx * cell_w + (cell_w - draw_w) / 2
+            cur_y = 25 + row_idx * cell_h + (cell_h - draw_h) / 2
+            
+            pdf.image(img_path, x=cur_x, y=cur_y, w=draw_w, h=draw_h)
 
     return bytes(pdf.output())
 
 # --- 発行ボタン ---
 if st.button("精算書PDFを発行する"):
-    # 支払総額が未入力の場合はストップをかける
     if total_amount is None:
         st.warning("⚠️「支払総額」を入力してください。")
     else:
