@@ -48,7 +48,7 @@ if t_number_val:
     t_number_val = 'T' + (t_number_val[1:] if t_number_val[0].upper() == 'T' else t_number_val)
 total_amount_val = total_amount if total_amount is not None else 0
 
-# --- 税区分テキストの動的生成（入力されたものだけを抽出） ---
+# --- 税区分テキストの動的生成 ---
 tax_texts = []
 if tax_10 is not None:
     tax_texts.append(f"10%消費税 ￥{tax_10:,}")
@@ -56,21 +56,18 @@ if tax_8 is not None:
     tax_texts.append(f"8%消費税 ￥{tax_8:,}")
 
 if tax_texts:
-    # 複数ある場合は「、」で繋げる
     tax_str = "、".join(tax_texts)
     amount_desc = f'総額 ￥{total_amount_val:,}（内、{tax_str}）の1/{num_people}相当額'
 else:
-    # 1つも入力されなかった場合
     amount_desc = f'総額 ￥{total_amount_val:,} の1/{num_people}相当額'
 
 # 宛名リストの作成
 input_recipients = [r.strip() for r in recipient.split(',')] if recipient else []
 input_recipients = [r for r in input_recipients if r]
 
-# 割り勘人数に対して不足している分を「空欄（宛名なし）」で補填
 recipients_list = input_recipients.copy()
 if len(recipients_list) < num_people:
-    recipients_list.append("") # 空欄は1つだけ
+    recipients_list.append("") 
 
 # --- PDF生成関数 ---
 def create_pdf(target_recipient):
@@ -88,7 +85,7 @@ def create_pdf(target_recipient):
     pdf.ln(6)
     
     pdf.set_font('IPAexGothic', '', 16)
-    disp_name = target_recipient if target_recipient else "　　　　　　　　" # 空欄時はスペース
+    disp_name = target_recipient if target_recipient else "　　　　　　　　"
     if target_recipient and not any(disp_name.endswith(s) for s in ["様", "御中", "殿"]):
         disp_name += " 様"
     pdf.cell(100, 8, disp_name, border='B', align='L', ln=True)
@@ -117,49 +114,58 @@ def create_pdf(target_recipient):
     pdf.cell(60, 5, t_number_val, ln=True)
     pdf.set_x(12)
     pdf.cell(25, 5, '（元支払額）', ln=0)
-    # ここに動的生成した内訳テキストを配置
     pdf.cell(100, 5, amount_desc, ln=True)
     
-    # 発行者と角印
-    pdf.set_font('IPAexGothic', '', 14)
+    # ----------------------------------------------------
+    # 発行者名と、伸縮自在のスタイリッシュなスタンプの描画
+    # ----------------------------------------------------
     issuer_text = issuer_val if issuer_val else "宮宅建中年部会"
-    tw = pdf.get_string_width(issuer_text)
-    ss = 16
-    start_x = 195 - (tw + 4 + ss)
-    pdf.set_xy(start_x, 115)
-    pdf.cell(tw, 10, issuer_text, align='L')
+    stamp_text = issuer_text # 「印」は勝手に追加しない
     
-    # --- 印鑑描画（文字数に応じた動的レイアウト） ---
-    sx, sy = start_x + tw + 4, 112
-    st_txt = issuer_text + "印"
-    if len(st_txt) > 9:
-        st_txt = st_txt[:8] + "印"
-        
-    # 文字数に応じて列(cols)と行(rows)を決定
-    if len(st_txt) <= 4:
-        cols, rows = 2, 2
-    elif len(st_txt) <= 6:
-        cols, rows = 2, 3
+    # まず黒文字の発行者名の幅を取得
+    pdf.set_font('IPAexGothic', '', 14)
+    text_width = pdf.get_string_width(issuer_text)
+    
+    # 次にスタンプの幅を文字数に合わせて計算
+    pdf.set_font('IPAexGothic', '', 11)
+    stamp_text_width = pdf.get_string_width(stamp_text)
+    stamp_h = 8 # スタンプの高さは8mmで固定
+    
+    # 1文字なら正方形、それ以外は文字幅＋余白の長方形
+    if len(stamp_text) == 1:
+        stamp_w = 8
     else:
-        cols, rows = 3, 3
+        stamp_w = stamp_text_width + 4 # 左右2mmずつの余白
         
-    st_txt = st_txt.ljust(cols * rows, "　") # 余ったマスは全角スペースで埋める
+    # 全体の幅から配置のスタート地点を逆算（右端から綺麗に揃える）
+    margin_between = 3 # 黒文字とスタンプの間の距離
+    total_width = text_width + margin_between + stamp_w
+    start_x = 195 - total_width 
+    text_y = 115
     
-    pdf.set_draw_color(220, 20, 60); pdf.set_text_color(220, 20, 60)
-    pdf.set_line_width(0.5); pdf.rect(sx, sy, ss, ss)
-    pdf.set_line_width(0.15); pdf.rect(sx+0.8, sy+0.8, ss-1.6, ss-1.6)
+    # 黒文字の描画
+    pdf.set_font('IPAexGothic', '', 14)
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_xy(start_x, text_y)
+    pdf.cell(text_width, 10, issuer_text, align='L')
     
-    cw, ch = ss / cols, ss / rows
-    pt_size = min(cw, ch) * 2.4 # セルサイズに合わせてフォントを最大化
-    pdf.set_font('IPAexGothic', '', pt_size)
+    # スタンプ枠の描画（赤色・二重線）
+    stamp_x = start_x + text_width + margin_between
+    stamp_y = text_y + 1 # 見栄えが良くなるよう少し下げる
     
-    for c in range(cols):
-        for r in range(rows):
-            idx = c * rows + r
-            px = sx + (cols - 1 - c) * cw
-            py = sy + r * ch - (ch * 0.1) # 縦位置を微調整
-            pdf.set_xy(px, py)
-            pdf.cell(cw, ch, st_txt[idx], align='C')
+    pdf.set_draw_color(220, 20, 60)
+    pdf.set_text_color(220, 20, 60)
+    pdf.set_line_width(0.4)
+    pdf.rect(stamp_x, stamp_y, stamp_w, stamp_h) # 外枠
+    pdf.set_line_width(0.15)
+    pdf.rect(stamp_x + 0.8, stamp_y + 0.8, stamp_w - 1.6, stamp_h - 1.6) # 内枠
+    
+    # スタンプ内の文字描画（ど真ん中に配置）
+    pdf.set_font('IPAexGothic', '', 11)
+    # y座標を微調整して文字が上下中央に来るようにする
+    pdf.set_xy(stamp_x, stamp_y + 0.5)
+    pdf.cell(stamp_w, stamp_h - 1, stamp_text, align='C')
+    # ----------------------------------------------------
 
     # 【証憑ページ】
     if uploaded_file:
@@ -203,11 +209,9 @@ if st.button("精算用データを作成する"):
                 fname = f"receipt_{rec if rec else 'blank'}.pdf"
                 temp_pdfs.append((label, pdf_data, fname, f"dl_{i}"))
             
-            # 作成したデータをセッションステート（記憶領域）に保存
             st.session_state.generated_pdfs = temp_pdfs
             st.session_state.show_downloads = True
 
-# 記憶領域にデータがあれば、常にダウンロードボタンを表示する
 if st.session_state.show_downloads:
     st.success("精算用領収書ができたので下記からダウンロードください。")
     for label, pdf_data, fname, key in st.session_state.generated_pdfs:
