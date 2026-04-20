@@ -32,7 +32,10 @@ with col1:
     t_number = st.text_input("登録番号", placeholder="例：1234567890123（Tは自動付与）")
 with col2:
     total_amount = st.number_input("支払総額（円）", min_value=0, value=None, placeholder="例：10000")
+    # 10%、8%、非課税の入力欄を追加
     tax_10 = st.number_input("内、10%対象の消費税（円）", min_value=0, value=None, placeholder="例：909")
+    tax_8 = st.number_input("内、8%対象の消費税（円）", min_value=0, value=None, placeholder="例：80")
+    non_tax = st.number_input("内、非課税対象の金額（円）", min_value=0, value=None, placeholder="例：1000")
 
 # --- ロジック準備 ---
 amount_per_person = 0
@@ -46,13 +49,29 @@ t_number_val = t_number.strip() if t_number else ""
 if t_number_val:
     t_number_val = 'T' + (t_number_val[1:] if t_number_val[0].upper() == 'T' else t_number_val)
 total_amount_val = total_amount if total_amount is not None else 0
-tax_10_val = tax_10 if tax_10 is not None else 0
+
+# --- 税区分テキストの動的生成（入力されたものだけを抽出） ---
+tax_texts = []
+if tax_10 is not None:
+    tax_texts.append(f"10%消費税 ￥{tax_10:,}")
+if tax_8 is not None:
+    tax_texts.append(f"8%消費税 ￥{tax_8:,}")
+if non_tax is not None:
+    tax_texts.append(f"非課税 ￥{non_tax:,}")
+
+if tax_texts:
+    # 複数ある場合は「、」で繋げる
+    tax_str = "、".join(tax_texts)
+    amount_desc = f'総額 ￥{total_amount_val:,}（内、{tax_str}）の1/{num_people}相当額'
+else:
+    # 1つも入力されなかった場合
+    amount_desc = f'総額 ￥{total_amount_val:,} の1/{num_people}相当額'
 
 # 宛名リストの作成
 input_recipients = [r.strip() for r in recipient.split(',')] if recipient else []
 input_recipients = [r for r in input_recipients if r]
 
-# 割り勘人数に対して不足している分を「空欄（宛名なし）」で補填（同じ見た目なので1つだけ追加）
+# 割り勘人数に対して不足している分を「空欄（宛名なし）」で補填
 recipients_list = input_recipients.copy()
 if len(recipients_list) < num_people:
     recipients_list.append("") # 空欄は1つだけ
@@ -102,7 +121,8 @@ def create_pdf(target_recipient):
     pdf.cell(60, 5, t_number_val, ln=True)
     pdf.set_x(12)
     pdf.cell(25, 5, '（元支払額）', ln=0)
-    pdf.cell(100, 5, f'総額 ￥{total_amount_val:,}（内消費税 ￥{tax_10_val:,}）の1/{num_people}相当額', ln=True)
+    # ここに動的生成した内訳テキストを配置
+    pdf.cell(100, 5, amount_desc, ln=True)
     
     # 発行者と角印
     pdf.set_font('IPAexGothic', '', 14)
@@ -113,7 +133,6 @@ def create_pdf(target_recipient):
     pdf.set_xy(start_x, 115)
     pdf.cell(tw, 10, issuer_text, align='L')
     
-    # 印鑑描画（省略版ロジック）
     sx, sy = start_x + tw + 4, 112
     st_txt = (issuer_text + "印")[:9].ljust(9)
     pdf.set_draw_color(220, 20, 60); pdf.set_text_color(220, 20, 60)
