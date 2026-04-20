@@ -66,7 +66,7 @@ def create_pdf():
         img.save(img_path)
         pdf.image(img_path, x=10, y=30, w=100) # サイズは調整可
 
-    return pdf.output(dest='S').encode('latin-1')
+    return bytes(pdf.output())
 
 # --- 発行ボタン ---
 if st.button("精算書PDFを発行する"):
