@@ -10,7 +10,7 @@ st.title("⚖️ 割り勘インボイス精算くん")
 st.write("レシートをアップして、人数を入れるだけで精算書PDFを作成します。")
 
 # --- 入力エリア ---
-uploaded_file = st.file_uploader("レシート画像をアップロードしてください", type=['jpg', 'jpeg', 'png'])
+uploaded_file = st.file_uploader("領収書（レシート）画像をアップロードしてください", type=['jpg', 'jpeg', 'png'])
 num_people = st.number_input("割り勘の人数", min_value=1, value=4)
 purpose = st.text_input("懇親会の目的（摘要）", value="中年部会 懇親会")
 issuer = st.text_input("発行元（立替者）", value="宮宅建中年部会")
@@ -33,49 +33,51 @@ def create_pdf():
     pdf = FPDF()
     pdf.add_font('IPAexGothic', '', 'ipaexg.ttf', uni=True)
     
-    # 【1ページ目：領収書（A5横サイズで綺麗にデザイン）】
+    # 【1ページ目：領収書（A5横サイズ）】
     pdf.add_page(orientation='L', format='A5')
+    # 自動改ページを無効化（ハンコなどが2ページ目に押し出されるのを防ぐ）
+    pdf.set_auto_page_break(auto=False) 
     
     # 日付
     pdf.set_font('IPAexGothic', '', 10)
     today_str = datetime.now().strftime("%Y年%m月%d日")
     pdf.cell(0, 5, today_str, align='R', ln=True)
-    pdf.ln(5)
+    pdf.ln(2)
     
     # タイトル
     pdf.set_font('IPAexGothic', '', 22)
     pdf.cell(0, 10, '領収書（割り勘）', align='C', ln=True)
-    # タイトルの下線
-    pdf.line(70, 25, 140, 25)
-    pdf.ln(5)
+    # タイトルの下線（文字にかぶらないように数ミリ下にずらしました）
+    pdf.line(75, 28, 135, 28)
+    pdf.ln(6)
     
     # 宛名
     pdf.set_font('IPAexGothic', '', 16)
     recipient_name = recipient if recipient else "関係者各位"
     pdf.cell(100, 8, f'{recipient_name} 様', border='B', align='L', ln=True)
-    pdf.ln(8)
+    pdf.ln(6)
     
     # 金額
     pdf.set_font('IPAexGothic', '', 26)
     amount_text = f'￥{amount_per_person:,} -'
     pdf.cell(0, 15, amount_text, align='C', ln=True)
     # 金額の下二重線
-    pdf.line(75, 70, 135, 70)
-    pdf.line(75, 71, 135, 71)
-    pdf.ln(8)
+    pdf.line(75, 66, 135, 66)
+    pdf.line(75, 67, 135, 67)
+    pdf.ln(6)
     
     # 摘要
     pdf.set_font('IPAexGothic', '', 11)
     pdf.cell(0, 6, f'但： {purpose}として', ln=True)
     
-    # 詳細枠
+    # 詳細枠（全体を少し上に詰めました）
     pdf.set_font('IPAexGothic', '', 9)
     pdf.set_fill_color(250, 250, 250)
     pdf.set_draw_color(200, 200, 200) # 薄いグレーの枠線
-    pdf.rect(10, 88, 190, 26, 'FD') 
+    pdf.rect(10, 84, 190, 26, 'FD') 
     pdf.set_draw_color(0, 0, 0) # 黒に戻す
     
-    pdf.set_xy(12, 90)
+    pdf.set_xy(12, 86)
     pdf.cell(25, 5, '（支払先）', ln=0)
     pdf.cell(60, 5, shop_name, ln=True)
     pdf.set_x(12)
@@ -87,14 +89,14 @@ def create_pdf():
     
     # 発行者
     pdf.set_font('IPAexGothic', '', 14)
-    pdf.set_xy(120, 120)
+    pdf.set_xy(120, 115)
     pdf.cell(70, 10, issuer, align='R', ln=True)
     
     # 疑似ハンコ（赤い丸と文字）
     pdf.set_draw_color(220, 20, 60)
     pdf.set_text_color(220, 20, 60)
     pdf.set_line_width(0.4)
-    stamp_x, stamp_y, stamp_r = 175, 115, 8
+    stamp_x, stamp_y, stamp_r = 175, 110, 8
     pdf.ellipse(stamp_x, stamp_y, stamp_r*2, stamp_r*2, 'D')
     pdf.set_font('IPAexGothic', '', 7)
     pdf.text(stamp_x + 3, stamp_y + 5.5, '宮宅建')
@@ -106,11 +108,15 @@ def create_pdf():
     pdf.set_text_color(0, 0, 0)
     pdf.set_line_width(0.2)
     
-    # 【2ページ目：レシート画像（はみ出さないようA4縦サイズに変更）】
+    # 【2ページ目：元の領収書画像】
     if uploaded_file:
+        # 自動改ページを元に戻す
+        pdf.set_auto_page_break(auto=True, margin=15) 
         pdf.add_page(orientation='P', format='A4')
         pdf.set_font('IPAexGothic', '', 12)
-        pdf.cell(0, 10, '（証憑：元のレシートコピー）', ln=True)
+        
+        # ご要望通り「レシート」を「領収書」に変更
+        pdf.cell(0, 10, '（証憑：元の領収書コピー）', ln=True) 
         
         img = Image.open(uploaded_file)
         img_path = "temp_receipt.png"
