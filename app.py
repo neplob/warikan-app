@@ -129,16 +129,37 @@ def create_pdf(target_recipient):
     pdf.set_xy(start_x, 115)
     pdf.cell(tw, 10, issuer_text, align='L')
     
+    # --- 印鑑描画（文字数に応じた動的レイアウト） ---
     sx, sy = start_x + tw + 4, 112
-    st_txt = (issuer_text + "印")[:9].ljust(9)
+    st_txt = issuer_text + "印"
+    if len(st_txt) > 9:
+        st_txt = st_txt[:8] + "印"
+        
+    # 文字数に応じて列(cols)と行(rows)を決定
+    if len(st_txt) <= 4:
+        cols, rows = 2, 2
+    elif len(st_txt) <= 6:
+        cols, rows = 2, 3
+    else:
+        cols, rows = 3, 3
+        
+    st_txt = st_txt.ljust(cols * rows, "　") # 余ったマスは全角スペースで埋める
+    
     pdf.set_draw_color(220, 20, 60); pdf.set_text_color(220, 20, 60)
     pdf.set_line_width(0.5); pdf.rect(sx, sy, ss, ss)
     pdf.set_line_width(0.15); pdf.rect(sx+0.8, sy+0.8, ss-1.6, ss-1.6)
-    pdf.set_font('IPAexGothic', '', 5.5)
-    for c in range(3):
-        for r in range(3):
-            pdf.set_xy(sx + (2-c)*(ss/3), sy + r*(ss/3))
-            pdf.cell(ss/3, ss/3, st_txt[c*3+r], align='C')
+    
+    cw, ch = ss / cols, ss / rows
+    pt_size = min(cw, ch) * 2.4 # セルサイズに合わせてフォントを最大化
+    pdf.set_font('IPAexGothic', '', pt_size)
+    
+    for c in range(cols):
+        for r in range(rows):
+            idx = c * rows + r
+            px = sx + (cols - 1 - c) * cw
+            py = sy + r * ch - (ch * 0.1) # 縦位置を微調整
+            pdf.set_xy(px, py)
+            pdf.cell(cw, ch, st_txt[idx], align='C')
 
     # 【証憑ページ】
     if uploaded_file:
