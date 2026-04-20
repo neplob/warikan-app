@@ -46,13 +46,10 @@ tax_10_val = tax_10 if tax_10 is not None else 0
 input_recipients = [r.strip() for r in recipient.split(',')] if recipient else []
 input_recipients = [r for r in input_recipients if r]
 
-# 割り勘人数に対して不足している分を「空欄（宛名なし）」で補填
-recipients_list = []
-for i in range(num_people):
-    if i < len(input_recipients):
-        recipients_list.append(input_recipients[i])
-    else:
-        recipients_list.append("") # 空欄
+# 割り勘人数に対して不足している分を「空欄（宛名なし）」で補填（同じ見た目なので1つだけ追加）
+recipients_list = input_recipients.copy()
+if len(recipients_list) < num_people:
+    recipients_list.append("") # 空欄は1つだけ
 
 # --- PDF生成関数 ---
 def create_pdf(target_recipient):
@@ -156,9 +153,16 @@ if st.button("精算用データを作成する"):
     if total_amount is None:
         st.warning("⚠️「支払総額」を入力してください。")
     else:
-        st.success(f"計 {num_people} 名分の領収書が準備できました。")
-        for i, rec in enumerate(recipients_list):
-            pdf_data = create_pdf(rec)
-            label = f"📥 {rec if rec else f'宛名なし({i+1})'} の領収書をダウンロード"
-            fname = f"receipt_{rec if rec else f'blank_{i+1}'}.pdf"
-            st.download_button(label=label, data=pdf_data, file_name=fname, mime="application/pdf", key=f"dl_{i}")
+        # スピナーを表示し、その中で全PDFデータを生成してリストに一時保存する
+        with st.spinner("準備中です。しばらくお待ちください..."):
+            generated_pdfs = []
+            for i, rec in enumerate(recipients_list):
+                pdf_data = create_pdf(rec)
+                label = f"📥 {rec if rec else '宛名なし'} の領収書をダウンロード"
+                fname = f"receipt_{rec if rec else 'blank'}.pdf"
+                generated_pdfs.append((label, pdf_data, fname, f"dl_{i}"))
+        
+        # 準備が完了したらメッセージとダウンロードボタンを表示
+        st.success("精算用領収書ができたので下記からダウンロードください。")
+        for label, pdf_data, fname, key in generated_pdfs:
+            st.download_button(label=label, data=pdf_data, file_name=fname, mime="application/pdf", key=key)
