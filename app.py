@@ -117,29 +117,21 @@ def create_pdf(target_recipient):
     pdf.cell(100, 5, amount_desc, ln=True)
     
     # ----------------------------------------------------
-    # 発行者名と、伸縮自在のスタイリッシュなスタンプの描画
+    # 発行者名と、正方形スタンプの描画
     # ----------------------------------------------------
     issuer_text = issuer_val if issuer_val else "宮宅建中年部会"
     stamp_text = issuer_text # 「印」は勝手に追加しない
     
-    # まず黒文字の発行者名の幅を取得
+    # 黒文字の発行者名の幅を取得
     pdf.set_font('IPAexGothic', '', 14)
     text_width = pdf.get_string_width(issuer_text)
     
-    # 次にスタンプの幅を文字数に合わせて計算
-    pdf.set_font('IPAexGothic', '', 11)
-    stamp_text_width = pdf.get_string_width(stamp_text)
-    stamp_h = 8 # スタンプの高さは8mmで固定
-    
-    # 1文字なら正方形、それ以外は文字幅＋余白の長方形
-    if len(stamp_text) == 1:
-        stamp_w = 8
-    else:
-        stamp_w = stamp_text_width + 4 # 左右2mmずつの余白
+    # スタンプのサイズを正方形に固定（14mm）
+    stamp_size = 14
         
     # 全体の幅から配置のスタート地点を逆算（右端から綺麗に揃える）
-    margin_between = 3 # 黒文字とスタンプの間の距離
-    total_width = text_width + margin_between + stamp_w
+    margin_between = 4 
+    total_width = text_width + margin_between + stamp_size
     start_x = 195 - total_width 
     text_y = 115
     
@@ -149,22 +141,52 @@ def create_pdf(target_recipient):
     pdf.set_xy(start_x, text_y)
     pdf.cell(text_width, 10, issuer_text, align='L')
     
-    # スタンプ枠の描画（赤色・二重線）
+    # スタンプ枠の描画（赤色・二重線・正方形）
     stamp_x = start_x + text_width + margin_between
-    stamp_y = text_y + 1 # 見栄えが良くなるよう少し下げる
+    stamp_y = text_y - 2 # 見栄えが良くなるよう少し上げる
     
     pdf.set_draw_color(220, 20, 60)
     pdf.set_text_color(220, 20, 60)
     pdf.set_line_width(0.4)
-    pdf.rect(stamp_x, stamp_y, stamp_w, stamp_h) # 外枠
+    pdf.rect(stamp_x, stamp_y, stamp_size, stamp_size) # 外枠
     pdf.set_line_width(0.15)
-    pdf.rect(stamp_x + 0.8, stamp_y + 0.8, stamp_w - 1.6, stamp_h - 1.6) # 内枠
+    pdf.rect(stamp_x + 0.8, stamp_y + 0.8, stamp_size - 1.6, stamp_size - 1.6) # 内枠
     
+    # テキストをよしなに分割（3文字以下は1行、4〜8文字は2行、9文字以上は3行）
+    length = len(stamp_text)
+    if length <= 3:
+        lines = [stamp_text]
+    elif length <= 8:
+        mid = math.ceil(length / 2)
+        lines = [stamp_text[:mid], stamp_text[mid:]]
+    else:
+        third = math.ceil(length / 3)
+        lines = [stamp_text[:third], stamp_text[third:third*2], stamp_text[third*2:]]
+        
+    # フォントサイズの自動調整（枠内に収まるように）
+    pt_size = 18.0
+    pdf.set_font('IPAexGothic', '', pt_size)
+    
+    while True:
+        max_w = max([pdf.get_string_width(line) for line in lines])
+        line_height = pt_size * 0.4
+        total_h = line_height * len(lines)
+        
+        if max_w <= (stamp_size - 2) and total_h <= (stamp_size - 2):
+            break
+        pt_size -= 0.5
+        if pt_size < 3: 
+            break
+        pdf.set_font('IPAexGothic', '', pt_size)
+        
     # スタンプ内の文字描画（ど真ん中に配置）
-    pdf.set_font('IPAexGothic', '', 11)
-    # y座標を微調整して文字が上下中央に来るようにする
-    pdf.set_xy(stamp_x, stamp_y + 0.5)
-    pdf.cell(stamp_w, stamp_h - 1, stamp_text, align='C')
+    line_height = pt_size * 0.4
+    total_h = line_height * len(lines)
+    start_y = stamp_y + (stamp_size - total_h) / 2
+    
+    for i, line in enumerate(lines):
+        pdf.set_xy(stamp_x, start_y + i * line_height)
+        pdf.cell(stamp_size, line_height, line, align='C')
     # ----------------------------------------------------
 
     # 【証憑ページ】
