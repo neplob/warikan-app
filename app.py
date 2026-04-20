@@ -32,10 +32,8 @@ with col1:
     t_number = st.text_input("登録番号", placeholder="例：1234567890123（Tは自動付与）")
 with col2:
     total_amount = st.number_input("支払総額（円）", min_value=0, value=None, placeholder="例：10000")
-    # 10%、8%、非課税の入力欄を追加
     tax_10 = st.number_input("内、10%対象の消費税（円）", min_value=0, value=None, placeholder="例：909")
     tax_8 = st.number_input("内、8%対象の消費税（円）", min_value=0, value=None, placeholder="例：80")
-    non_tax = st.number_input("内、非課税対象の金額（円）", min_value=0, value=None, placeholder="例：1000")
 
 # --- ロジック準備 ---
 amount_per_person = 0
@@ -56,8 +54,6 @@ if tax_10 is not None:
     tax_texts.append(f"10%消費税 ￥{tax_10:,}")
 if tax_8 is not None:
     tax_texts.append(f"8%消費税 ￥{tax_8:,}")
-if non_tax is not None:
-    tax_texts.append(f"非課税 ￥{non_tax:,}")
 
 if tax_texts:
     # 複数ある場合は「、」で繋げる
