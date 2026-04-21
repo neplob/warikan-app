@@ -7,8 +7,8 @@ import fitz  # PyMuPDF
 import io
 
 # --- アプリの基本設定 ---
-st.set_page_config(page_title="宮宅建 中年部会 割り勘精算くん", layout="centered")
-st.title("⚖️ 割り勘インボイス精算くん")
+st.set_page_config(page_title="割り勘精算くん", layout="centered")
+st.title("⚖️ 割り勘精算くん")
 st.write("領収書をアップして、人数を入れるだけで精算書PDFを作成します。")
 
 # --- セッションステート（記憶領域）の初期化 ---
