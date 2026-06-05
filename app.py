@@ -210,11 +210,22 @@ def create_pdf(target_recipient):
         rows = math.ceil(len(images)/cols)
         cw, ch = 190/cols, 260/rows
         for i, img in enumerate(images):
-            img.save(f"t_{i}.png")
+            # 1. 画像がRGBA（透過）などの場合はRGBに変換（JPEG保存のため必須）
+            if img.mode != 'RGB':
+                img = img.convert('RGB')
+            
+            # 2. 画像のサイズを最大1000pxに縮小（これで超高画質スマホ写真も適正サイズに）
+            img.thumbnail((1000, 1000))
+            
+            # 3. PNGではなく「圧縮を効かせたJPEG（画質60%）」として保存（ここで劇的に軽くなります）
+            img.save(f"t_{i}.jpg", "JPEG", quality=60, optimize=True)
+            
             iw, ih = img.size
             dw = cw-5; dh = dw*(ih/iw)
             if dh > ch-5: dh = ch-5; dw = dh/(ih/iw)
-            pdf.image(f"t_{i}.png", x=10+(i%cols)*cw+(cw-dw)/2, y=25+(i//cols)*ch+(ch-dh)/2, w=dw, h=dh)
+            
+            # 4. 圧縮されたJPEGをPDFに貼り付け
+            pdf.image(f"t_{i}.jpg", x=10+(i%cols)*cw+(cw-dw)/2, y=25+(i//cols)*ch+(ch-dh)/2, w=dw, h=dh)
 
     return bytes(pdf.output())
 
